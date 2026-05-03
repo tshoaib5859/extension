@@ -658,7 +658,7 @@
         (b) =>
           isVisible(b) &&
           !b.disabled &&
-          /source\s*code|insert\s*html|html\s*template|<>/i.test(
+          /source\s*code|insert\s*html|html\s*template|<>|\(⌘⇧E\)|\(Ctrl\+Shift\+E\)/i.test(
             (b.title || b.getAttribute("aria-label") || b.textContent || "").trim()
           )
       ) || null
@@ -671,26 +671,36 @@
    * or an error string on failure.
    */
   async function insertBodyViaHtmlDialog(html) {
-    const btn = findInsertHtmlButton();
-    if (!btn) return "Insert HTML button not found in Titan toolbar";
-
-    clickEl(btn);
+    // First try keyboard shortcut to open HTML dialog (Cmd+Shift+E / Ctrl+Shift+E)
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const shortcutEvent = new KeyboardEvent('keydown', {
+      key: 'E',
+      code: 'KeyE',
+      ctrlKey: !isMac,
+      metaKey: isMac,
+      shiftKey: true,
+      bubbles: true
+    });
+    document.dispatchEvent(shortcutEvent);
     await sleep(600);
 
-    // Wait for the dialog / modal to appear.
-    const dialogFound = await waitFor(() => {
-      const d = document.querySelector(
-        "[role='dialog'], [class*='modal'], [class*='dialog'], [class*='Modal'], [class*='Dialog']"
-      );
-      return !!(d && isVisible(d));
-    }, 6000);
-
-    if (!dialogFound) return "Insert HTML dialog did not open";
-
-    const dialog = document.querySelector(
+    // Check if dialog opened
+    let dialog = document.querySelector(
       "[role='dialog'], [class*='modal'], [class*='dialog'], [class*='Modal'], [class*='Dialog']"
     );
-    if (!dialog) return "Insert HTML dialog element missing";
+    if (!dialog || !isVisible(dialog)) {
+      // Fallback: find and click the button
+      const btn = findInsertHtmlButton();
+      if (!btn) return "Insert HTML button not found in Titan toolbar";
+
+      clickEl(btn);
+      await sleep(600);
+
+      dialog = document.querySelector(
+        "[role='dialog'], [class*='modal'], [class*='dialog'], [class*='Modal'], [class*='Dialog']"
+      );
+      if (!dialog || !isVisible(dialog)) return "Insert HTML dialog did not open";
+    }
 
     const textarea =
       dialog.querySelector("textarea") ||
@@ -1007,8 +1017,10 @@
       return { ok: true };
     } finally {
       try {
-        await closeComposeWindow();
-        await sleep(300);
+        if (composeFieldsPresent()) {
+          await closeComposeWindow();
+          await sleep(300);
+        }
       } catch {
         // Ignore cleanup failures so the worker can continue.
       } finally {

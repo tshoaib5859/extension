@@ -671,36 +671,36 @@
    * or an error string on failure.
    */
   async function insertBodyViaHtmlDialog(html) {
-    // First try keyboard shortcut to open HTML dialog (Cmd+Shift+E / Ctrl+Shift+E)
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const shortcutEvent = new KeyboardEvent('keydown', {
-      key: 'E',
-      code: 'KeyE',
-      ctrlKey: !isMac,
-      metaKey: isMac,
-      shiftKey: true,
-      bubbles: true
-    });
-    document.dispatchEvent(shortcutEvent);
+    // First try to find and click the Insert HTML button
+    const btn = findInsertHtmlButton();
+    if (btn) {
+      clickEl(btn);
+    } else {
+      // Fallback: keyboard shortcut
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const shortcutEvent = new KeyboardEvent('keydown', {
+        key: 'E',
+        code: 'KeyE',
+        ctrlKey: !isMac,
+        metaKey: isMac,
+        shiftKey: true,
+        bubbles: true
+      });
+      document.dispatchEvent(shortcutEvent);
+    }
     await sleep(600);
 
-    // Check if dialog opened
-    let dialog = document.querySelector(
+    // Wait for the dialog to appear
+    const dialog = document.querySelector(
       "[role='dialog'], [class*='modal'], [class*='dialog'], [class*='Modal'], [class*='Dialog']"
     );
-    if (!dialog || !isVisible(dialog)) {
-      // Fallback: find and click the button
-      const btn = findInsertHtmlButton();
-      if (!btn) return "Insert HTML button not found in Titan toolbar";
+    if (!dialog || !isVisible(dialog)) return "Insert HTML dialog did not open";
 
-      clickEl(btn);
-      await sleep(600);
-
-      dialog = document.querySelector(
-        "[role='dialog'], [class*='modal'], [class*='dialog'], [class*='Modal'], [class*='Dialog']"
-      );
-      if (!dialog || !isVisible(dialog)) return "Insert HTML dialog did not open";
-    }
+    const textarea =
+      dialog.querySelector("textarea") ||
+      dialog.querySelector("input[type='text']") ||
+      dialog.querySelector("[contenteditable='true']");
+    if (!textarea) return "HTML textarea not found in Insert HTML dialog";
 
     const textarea =
       dialog.querySelector("textarea") ||

@@ -395,9 +395,6 @@ async function parallelChunkLoop() {
         const ready = await waitUntilReady(tabId, () => {});
         if (!ready.ok) return { row, ok: false, error: `Tab not ready: ${ready.reason}` };
 
-        // Activate the tab briefly for sending
-        await chrome.tabs.update(tabId, { active: true });
-
         const bodyHtml   = U.fillTemplate(template, row, false);
         const subjectStr = U.fillTemplate(subject, row, true);
         const res = await sendEmailWithRetry(tabId, { to: row.email, subject: subjectStr, bodyHtml });

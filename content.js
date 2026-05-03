@@ -702,12 +702,6 @@
       dialog.querySelector("[contenteditable='true']");
     if (!textarea) return "HTML textarea not found in Insert HTML dialog";
 
-    const textarea =
-      dialog.querySelector("textarea") ||
-      dialog.querySelector("input[type='text']") ||
-      dialog.querySelector("[contenteditable='true']");
-    if (!textarea) return "HTML textarea not found in Insert HTML dialog";
-
     textarea.focus();
     await sleep(150);
     const proto = Object.getPrototypeOf(textarea);

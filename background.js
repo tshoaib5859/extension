@@ -374,38 +374,35 @@ async function parallelChunkLoop() {
         if (!chunk.length) continue;
       }
 
-      // ── Open one background Titan tab per row ────────────────────────────
-      await appendLog("info", `Opening ${chunk.length} Titan tab(s)…`);
-      const tabIds = [];
+      // ── Process each email sequentially ────────────────────────────
+      const results = [];
       for (const row of chunk) {
+        // Open a new Titan tab
+        let tabId;
         try {
-          const tab = await chrome.tabs.create({ url: TITAN_URL, active: false });
-          tabIds.push(tab.id);
+          const tab = await chrome.tabs.create({ url: TITAN_URL, active: true });
+          tabId = tab.id;
         } catch (e) {
-          tabIds.push(null);
-          await appendLog("error", `Failed to open tab for ${row.email}: ${String(e && e.message)}`);
+          results.push({ row, ok: false, error: `Failed to open tab: ${String(e && e.message)}` });
+          continue;
         }
-      }
-
-      // ── Wait for all tabs ready + send in parallel ───────────────────────
-      const results = await Promise.all(chunk.map(async (row, i) => {
-        const tabId = tabIds[i];
-        if (!tabId) return { row, ok: false, error: "Tab failed to open" };
 
         const ready = await waitUntilReady(tabId, () => {});
-        if (!ready.ok) return { row, ok: false, error: `Tab not ready: ${ready.reason}` };
+        if (!ready.ok) {
+          results.push({ row, ok: false, error: `Tab not ready: ${ready.reason}` });
+          chrome.tabs.remove(tabId);
+          continue;
+        }
 
         const bodyHtml   = U.fillTemplate(template, row, false);
         const subjectStr = U.fillTemplate(subject, row, true);
         const res = await sendEmailWithRetry(tabId, { to: row.email, subject: subjectStr, bodyHtml });
-        return { row, ok: res.ok, error: res.error };
-      }));
+        results.push({ row, ok: res.ok, error: res.error });
 
-      // ── Close all tabs immediately ───────────────────────────────────────
-      for (const tabId of tabIds) {
-        if (tabId) { try { chrome.tabs.remove(tabId); } catch {} }
+        // Close the tab after sending
+        chrome.tabs.remove(tabId);
       }
-      await appendLog("info", `Chunk done — closed ${tabIds.filter(Boolean).length} tab(s).`);
+      await appendLog("info", `Chunk done — processed ${results.length} email(s).`);
 
       // ── Persist results ──────────────────────────────────────────────────
       const freshSentList = (await storageGet([U.STORAGE_KEYS.SENT]))[U.STORAGE_KEYS.SENT] || [];

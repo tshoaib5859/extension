@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Titan Mail Sender</title>
+    <style>
+      :root {
+        --bg: #0f1419;
+        --panel: #1a2332;
+        --border: #2d3a4d;
+        --text: #e7edf5;
+        --muted: #8b9cb3;
+        --accent: #3b82f6;
+        --ok: #22c55e;
+        --warn: #eab308;
+        --err: #ef4444;
+        --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        width: 420px;
+        min-height: 480px;
+        font-family: var(--font);
+        font-size: 13px;
+        color: var(--text);
+        background: var(--bg);
+      }
+      header {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .sub {
+        margin-top: 4px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      main {
+        padding: 12px 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      textarea,
+      input[type="text"],
+      input[type="number"],
+      input[type="file"] {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px;
+        background: #111827;
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+      }
+      textarea {
+        min-height: 72px;
+        resize: vertical;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      button {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: #2563eb;
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--muted);
+      }
+      .dot.run {
+        background: var(--ok);
+      }
+      .dot.pause {
+        background: var(--warn);
+      }
+      .dot.stop {
+        background: var(--err);
+      }
+      .dot.idle {
+        background: var(--muted);
+      }
+      progress {
+        width: 100%;
+        height: 8px;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      progress::-webkit-progress-bar {
+        background: #111827;
+      }
+      progress::-webkit-progress-value {
+        background: var(--accent);
+      }
+      .logs {
+        max-height: 120px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 8px;
+        background: #111827;
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      .log-line {
+        margin: 0 0 4px;
+        color: var(--muted);
+      }
+      .log-line.info {
+        color: #93c5fd;
+      }
+      .log-line.warn {
+        color: #fde047;
+      }
+      .log-line.error {
+        color: #fca5a5;
+      }
+      .hint {
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+      /* ── Template prompt ── */
+      .field-error {
+        border-color: var(--err) !important;
+        box-shadow: 0 0 0 2px rgba(239,68,68,0.25);
+      }
+      .template-notice {
+        display: none;
+        margin-top: 5px;
+        padding: 6px 8px;
+        border-radius: 5px;
+        background: rgba(239,68,68,0.12);
+        border: 1px solid rgba(239,68,68,0.35);
+        font-size: 11px;
+        color: #fca5a5;
+        line-height: 1.4;
+      }
+      .template-notice.visible { display: block; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Titan Mail Sender</h1>
+      <div class="sub">Queue-based sending for Titan Webmail (Manifest V3)</div>
+    </header>
+    <main>
+      <!-- ──────────────── GOOGLE SHEET (primary) ──────────────── -->
+      <div>
+        <label for="scriptUrl">Apps Script URL <span style="color:var(--ok);font-weight:600">(Sheet mode)</span></label>
+        <input type="text" id="scriptUrl"
+          placeholder="https://script.google.com/macros/s/…/exec"
+          spellcheck="false" />
+        <p class="hint">
+          Paste the Web App URL from your Google Apps Script.
+          When filled, recipients are fetched from the Sheet 5 at a time and each row
+          is marked <strong>Yes</strong> in the &ldquo;Email Sent&rdquo; column after sending.
+          Leave blank to use CSV mode below.
+        </p>
+      </div>
+
+      <!-- ──────────────── CSV (fallback) ───────────────── -->
+      <div>
+        <label for="csv">Recipients — CSV fallback <span style="color:var(--muted)">(ignored when Sheet URL set)</span></label>
+        <input type="file" id="file" accept=".csv,text/csv,text/plain" />
+        <textarea id="csv" placeholder="Name,Email,Serial Number,Status,Filing Date&#10;Jane Doe,jane@example.com,SN-1,Active,2024-01-15" spellcheck="false"></textarea>
+        <p class="hint">Export your Google Sheet as CSV, upload it here, or paste tabular text. Required column: <strong>Email</strong>.</p>
+      </div>
+
+      <div>
+        <label for="subject">Subject template</label>
+        <input type="text" id="subject" placeholder="Hello {{Name}} — {{Status}}" spellcheck="false" />
+      </div>
+
+      <div>
+        <label for="template">Body template (HTML allowed; variables are escaped)</label>
+        <textarea id="template" placeholder="Hi {{Name}},&#10;&#10;Your serial is {{Serial Number}}.&#10;&#10;Thanks." spellcheck="false"></textarea>
+        <div class="template-notice" id="templateNotice">
+          ⚠️ Please enter your email body template above before starting.
+          Use <code>{{Name}}</code>, <code>{{Email}}</code>, <code>{{Serial Number}}</code>, etc.
+          to personalise each message. Variables must match your column headers exactly.
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="delay">Delay (ms)</label>
+          <input type="number" id="delay" min="0" step="500" value="5000" />
+        </div>
+        <div>
+          <label for="jitter">Jitter ± (ms)</label>
+          <input type="number" id="jitter" min="0" step="100" value="1500" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="max">Max per run</label>
+          <input type="number" id="max" min="1" max="10000" value="100" />
+        </div>
+        <div>
+          <label for="parallelTabs">Parallel tabs (1–10)</label>
+          <input type="number" id="parallelTabs" min="1" max="10" value="3" />
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button type="button" class="primary" id="btnStart">Start</button>
+        <button type="button" id="btnPause">Pause</button>
+        <button type="button" id="btnResume">Resume</button>
+        <button type="button" id="btnStop">Stop</button>
+        <button type="button" id="btnClearSent">Clear sent history</button>
+        <button type="button" id="btnClearLogs">Clear logs</button>
+      </div>
+
+      <div class="status" id="statusBox">
+        <span class="dot idle" id="statusDot"></span>
+        <div>
+          <div id="statusText">Stopped</div>
+          <div class="hint" id="statusSub"></div>
+        </div>
+      </div>
+
+      <div>
+        <label>Progress</label>
+        <progress id="progress" value="0" max="100"></progress>
+        <div class="hint" id="progressLabel">0 / 0</div>
+      </div>
+
+      <div>
+        <label>Logs</label>
+        <div class="logs" id="logs"></div>
+      </div>
+    </main>
+    <script src="utils.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

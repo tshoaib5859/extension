@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Titan Mail Sender",
+  "version": "1.0.1",
+  "description": "Send personalized emails via Titan Webmail with queue, pause/resume, and safe templating.",
+  "permissions": ["tabs", "scripting", "storage", "activeTab"],
+  "host_permissions": [
+    "https://secureserver.titan.email/mail//*",
+    "https://*.titan.email/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Titan Mail Sender",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://secureserver.titan.email/mail/*", "https://*.titan.email/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

@@ -374,35 +374,41 @@ async function parallelChunkLoop() {
         if (!chunk.length) continue;
       }
 
-      // ── Process each email sequentially ────────────────────────────
-      const results = [];
+      // ── Open Titan tabs for the chunk ────────────────────────────
+      await appendLog("info", `Opening ${chunk.length} Titan tab(s)…`);
+      const tabIds = [];
       for (const row of chunk) {
-        // Open a new Titan tab
-        let tabId;
         try {
-          const tab = await chrome.tabs.create({ url: TITAN_URL, active: true });
-          tabId = tab.id;
+          const tab = await chrome.tabs.create({ url: TITAN_URL, active: false });
+          tabIds.push(tab.id);
         } catch (e) {
-          results.push({ row, ok: false, error: `Failed to open tab: ${String(e && e.message)}` });
-          continue;
+          tabIds.push(null);
+          await appendLog("error", `Failed to open tab for ${row.email}: ${String(e && e.message)}`);
         }
+      }
+
+      // ── Wait for all tabs ready + send in parallel ───────────────────────
+      const results = await Promise.all(chunk.map(async (row, i) => {
+        const tabId = tabIds[i];
+        if (!tabId) return { row, ok: false, error: "Tab failed to open" };
 
         const ready = await waitUntilReady(tabId, () => {});
-        if (!ready.ok) {
-          results.push({ row, ok: false, error: `Tab not ready: ${ready.reason}` });
-          chrome.tabs.remove(tabId);
-          continue;
-        }
+        if (!ready.ok) return { row, ok: false, error: `Tab not ready: ${ready.reason}` };
+
+        // Activate the tab briefly for sending
+        await chrome.tabs.update(tabId, { active: true });
 
         const bodyHtml   = U.fillTemplate(template, row, false);
         const subjectStr = U.fillTemplate(subject, row, true);
         const res = await sendEmailWithRetry(tabId, { to: row.email, subject: subjectStr, bodyHtml });
-        results.push({ row, ok: res.ok, error: res.error });
+        return { row, ok: res.ok, error: res.error };
+      }));
 
-        // Close the tab after sending
-        chrome.tabs.remove(tabId);
+      // ── Close all tabs immediately ───────────────────────────────────────
+      for (const tabId of tabIds) {
+        if (tabId) { try { chrome.tabs.remove(tabId); } catch {} }
       }
-      await appendLog("info", `Chunk done — processed ${results.length} email(s).`);
+      await appendLog("info", `Chunk done — closed ${tabIds.filter(Boolean).length} tab(s).`);
 
       // ── Persist results ──────────────────────────────────────────────────
       const freshSentList = (await storageGet([U.STORAGE_KEYS.SENT]))[U.STORAGE_KEYS.SENT] || [];

@@ -65,6 +65,8 @@
 
     const selectors = [
       'input[placeholder="To"]',
+      'input[placeholder="Recipients"]',
+      'input[placeholder*="recipient" i]',
       'input[aria-label="To field"]',
       'input[type="email"]',
       'input[placeholder*="To" i]',
@@ -81,14 +83,26 @@
       if (hit) return hit;
     }
     const all = Array.from(document.querySelectorAll("input, textarea, [contenteditable='true']"));
-    return (
-      all.find(
-        (el) =>
-          isVisible(el) &&
-          (/recipient|to\b/i.test(el.getAttribute("placeholder") || "") ||
-            /to/i.test(el.getAttribute("aria-label") || ""))
-      ) || null
+    const byAttr = all.find(
+      (el) =>
+        isVisible(el) &&
+        (/recipient|to\b/i.test(el.getAttribute("placeholder") || "") ||
+          /to/i.test(el.getAttribute("aria-label") || ""))
     );
+    if (byAttr) return byAttr;
+
+    // Label-based fallback: find an input adjacent to any element with text "To:".
+    const labels = Array.from(document.querySelectorAll("label, span, div")).filter(
+      (el) => isVisible(el) && /^\s*to\s*:?\s*$/i.test((el.textContent || "").trim())
+    );
+    for (const label of labels) {
+      const parent = label.closest("div, tr, li") || label.parentElement;
+      if (!parent) continue;
+      const input = parent.querySelector("input, textarea, [contenteditable='true'], [role='combobox'], [role='textbox']");
+      if (input && isVisible(input)) return input;
+    }
+
+    return null;
   }
 
   function findSubjectField() {
@@ -163,7 +177,7 @@
     if (xSemantic && isVisible(xSemantic) && !xSemantic.disabled) return xSemantic;
 
     // Tier 2: CSS by data-testid and class, skipping any dialog ancestors.
-    for (const sel of ['[data-testid="send-action-btn"]', '.btn-send', '.btn-primary.btn-send']) {
+    for (const sel of ['[data-testid="send-action-btn"]', '.btn-send', '.send-btn', '.btn-primary.btn-send']) {
       const el = document.querySelector(sel);
       if (el && isVisible(el) && !el.disabled && !el.closest('[role="dialog"]')) return el;
     }
@@ -219,7 +233,7 @@
       buttons.find((el) => {
         if (!isVisible(el) || el.disabled) return false;
         const text = `${el.textContent || ""} ${el.getAttribute("aria-label") || ""}`.toLowerCase();
-        return /compose|new message|new mail|write|create/i.test(text);
+        return /compose|new\s*email|new message|new mail|write|create/i.test(text);
       }) || null
     );
   }
@@ -238,8 +252,7 @@
   function composeFieldsPresent() {
     const to = findToField();
     const sub = findSubjectField();
-    const body = findBodyEditor();
-    return !!(to && sub && body);
+    return !!(to && sub); // body editor loads later — don't gate on it
   }
 
   async function ensureComposeOpen() {
@@ -583,17 +596,26 @@
   function findCloseComposeButton() {
     const xClose = closestClickable(queryXPath(XPATHS.closeCompose)) || queryXPath(XPATHS.closeCompose);
     if (xClose && isVisible(xClose)) return xClose;
+
     const selectors = [
-      '[aria-label*="close" i][role="button"]',
-      '[aria-label*="discard" i][role="button"]',
+      '[data-testid*="close" i]',
+      '[data-testid*="discard" i]',
+      '[aria-label*="close" i]',
+      '[aria-label*="discard" i]',
       '[title*="close" i]',
       '[title*="discard" i]',
+      '[class*="close-compose"]',
+      '[class*="closeCompose"]',
+      '[class*="compose-close"]',
     ];
     for (const sel of selectors) {
       const el = document.querySelector(sel);
-      if (el && isVisible(el)) return el;
+      if (el && isVisible(el)) return closestClickable(el) || el;
     }
-    return null;
+
+    // Scan for small buttons (×, ✕, ✖) in the compose header area.
+    const allBtns = Array.from(document.querySelectorAll("button, [role='button'], span[class*='close'], span[class*='Close']"));
+    return allBtns.find((b) => isVisible(b) && /^[×✕✖x]$/i.test((b.textContent || "").trim())) || null;
   }
 
   /**
@@ -645,12 +667,26 @@
     const byClass = document.querySelector('.insert-html-button-pendo, [class*="insert-html"]');
     if (byClass && isVisible(byClass) && !byClass.disabled) return byClass;
 
-    // Titan toolbar button: title="Source Code" or data-action="insertHTML".
-    const byAttr = document.querySelector('[title="Source Code"], [data-action="insertHTML"]');
+    // Titan toolbar button: title="Insert HTML", "Source Code", or data-action="insertHTML".
+    const byAttr = document.querySelector('[title="Insert HTML"], [title="Source Code"], [data-action="insertHTML"]');
     if (byAttr && isVisible(byAttr) && !byAttr.disabled) return closestClickable(byAttr) || byAttr;
 
     const xBtn = closestClickable(queryXPath(XPATHS.insertHtml)) || queryXPath(XPATHS.insertHtml);
     if (xBtn && isVisible(xBtn)) return xBtn;
+
+    // Titan-specific: the Insert HTML (</>) button is the last unnamed button
+    // immediately before the trash icon in the compose bottom toolbar.
+    const allVisibleBtns = Array.from(document.querySelectorAll("button, [role='button']")).filter(isVisible);
+    const trashIdx = allVisibleBtns.findIndex(function (b) {
+      const img = b.querySelector('img');
+      return img && /trash|delete/i.test(img.getAttribute('src') || img.getAttribute('alt') || '');
+    });
+    if (trashIdx > 0) {
+      for (let ti = trashIdx - 1; ti >= Math.max(0, trashIdx - 5); ti--) {
+        const candidate = allVisibleBtns[ti];
+        if (candidate && !candidate.disabled) return candidate;
+      }
+    }
 
     const buttons = Array.from(document.querySelectorAll("button, [role='button']"));
     return (
@@ -658,7 +694,7 @@
         (b) =>
           isVisible(b) &&
           !b.disabled &&
-          /source\s*code|insert\s*html|html\s*template|<>|\(⌘⇧E\)|\(Ctrl\+Shift\+E\)/i.test(
+          /source\s*code|insert\s*html|html\s*template|<>/i.test(
             (b.title || b.getAttribute("aria-label") || b.textContent || "").trim()
           )
       ) || null
@@ -767,8 +803,6 @@
     const rect = el.getBoundingClientRect();
     const cx = Math.round(rect.left + rect.width / 2);
     const cy = Math.round(rect.top + rect.height / 2);
-    // detail:1 is required — el.click() produces detail:0 which React onClick handlers
-    // treat as a programmatic (non-user) click and ignore for sensitive actions like Send.
     const downInit = { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0, buttons: 1, view: window };
     const upInit   = { ...downInit, buttons: 0, detail: 1 };
     el.dispatchEvent(new PointerEvent("pointerdown", { ...downInit, isPrimary: true, pointerId: 1 }));
@@ -776,6 +810,8 @@
     el.dispatchEvent(new PointerEvent("pointerup",   { ...upInit,  isPrimary: true, pointerId: 1 }));
     el.dispatchEvent(new MouseEvent("mouseup",       upInit));
     el.dispatchEvent(new MouseEvent("click",         upInit));
+    // Native click as final fallback — some React builds require this.
+    el.click();
     return true;
   }
 
@@ -986,26 +1022,33 @@
       }
 
       // ── STEP 4: Send ─────────────────────────────────────────────────────────
-      const sendBtn = findSendButton();
+      // Scan every visible button for text "Send" — skip anything inside a dialog.
+      function scanForSendBtn() {
+        return Array.from(document.querySelectorAll("button")).find(
+          (b) =>
+            isVisible(b) &&
+            !b.disabled &&
+            !b.closest('[role="dialog"]') &&
+            /^\s*send\s*$/i.test((b.textContent || "").trim())
+        ) || null;
+      }
+
+      const sendBtn = scanForSendBtn();
       if (!sendBtn) return { ok: false, error: "Send button not found." };
 
-      // Focus the button so it's the active element, then click.
       sendBtn.focus();
-      await sleep(150);
+      await sleep(100);
 
       const snap = captureComposeSnapshot(payload);
-      clickEl(sendBtn);
+      sendBtn.click();
 
-      // Retry once after 2 s if Titan hasn't responded (slow render or missed click).
-      const retryTimer = setTimeout(() => {
-        if (composeFieldsPresent()) {
-          const btn = findSendButton();
-          if (btn) { btn.focus(); clickEl(btn); }
-        }
-      }, 2000);
+      // Retry: click again at 2 s, Ctrl+Enter at 4 s, final click at 6 s.
+      const t1 = setTimeout(() => { if (!composeFieldsPresent()) return; const b = scanForSendBtn(); if (b) { b.focus(); b.click(); } }, 2000);
+      const t2 = setTimeout(() => { if (!composeFieldsPresent()) return; (findBodyEditor() || document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, ctrlKey: true, bubbles: true, cancelable: true })); }, 4000);
+      const t3 = setTimeout(() => { if (!composeFieldsPresent()) return; const b = scanForSendBtn(); if (b) { b.focus(); b.click(); } }, 6000);
 
       const sentOk = await watchSendConfirmation(snap);
-      clearTimeout(retryTimer);
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
       if (!sentOk) return { ok: false, error: "Send did not complete — Titan may have shown an error." };
 
       return { ok: true };

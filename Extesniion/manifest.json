@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Titan Mail Sender",
-  "version": "1.0.1",
+  "version": "1.0.26",
   "description": "Send personalized emails via Titan Webmail with queue, pause/resume, and safe templating.",
   "permissions": ["tabs", "scripting", "storage", "activeTab"],
   "host_permissions": [
